@@ -1,6 +1,8 @@
 <script setup>
 	import Card from '../components/Card.vue';
 	import { Line, Pie } from 'vue-chartjs';
+	import dayjs from 'dayjs';
+	import duration from 'dayjs/plugin/duration';
 	import {
 		Chart as ChartJS,
 		CategoryScale,
@@ -13,7 +15,8 @@
 	} from 'chart.js';
 	import { onMounted, ref } from 'vue';
 	import { computed } from '@vue/reactivity';
-	const rateSet = () => (Math.random() * (10 - 4) + 4).toFixed(2);
+	dayjs.extend(duration);
+	const rateSet = () => (Math.random() * (10 - 6) + 6).toFixed(2);
 	const data = ref({
 		successful: 0,
 		to_process: 0,
@@ -57,11 +60,16 @@
 			},
 		],
 	};
+
+	const pollingRate = ref(30);
+
 	const fetchData = async () => {
 		const req = await fetch('http://localhost:4444/stats');
 		const res = await req.json();
-		data.value.rate = rateSet();
-		data.eta = Math.round(data.rate * data.remaining);
+		data.value.rate = res.remaining == 0 ? 0 : rateSet();
+		data.value.eta = dayjs
+			.duration((res.remaining / data.value.rate) * 60 * 1000)
+			.format('HH:mm:ss');
 		data.value.config = res.config;
 		data.value.successful = res.successful;
 		data.value.to_process = res.to_process;
@@ -71,6 +79,9 @@
 		data.value.remaining = res.remaining;
 		pieDataC.value = [res.successful, res.remaining];
 		lineDataC.value = res.remaining;
+		if (res.polling_rate && res.polling_rate !== 0) {
+			pollingRate.value = res.polling_rate;
+		}
 	};
 	const finalData = computed(() => data.value);
 	const pieKey = ref(0);
@@ -98,7 +109,7 @@
 	});
 	onMounted(async () => {
 		await fetchData();
-		setInterval(() => fetchData(), 30 * 1000);
+		setInterval(() => fetchData(), pollingRate.value * 1000);
 	});
 </script>
 
@@ -147,11 +158,11 @@
 				<div class="timings">
 					<table>
 						<tr>
-							<th>ETA</th>
+							<th>ETA (mins)</th>
 							<th>Rate(urls/min)</th>
 						</tr>
 						<tr>
-							<td>{{ finalData.eta }}</td>
+							<td>~{{ finalData.eta }}</td>
 							<td>{{ finalData.rate }}</td>
 						</tr>
 					</table>
